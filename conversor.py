@@ -307,9 +307,9 @@ def process(pdf_path):
 def build_docx(pre_items, table_rows, out):
     doc = Document()
     sec = doc.sections[0]
-    sec.page_width    = Cm(21);  sec.page_height   = Cm(29.7)
-    sec.left_margin   = Cm(2);   sec.right_margin  = Cm(2)
-    sec.top_margin    = Cm(2);   sec.bottom_margin = Cm(2)
+    sec.page_width    = Cm(27);  sec.page_height   = Cm(35)
+    sec.left_margin   = Cm(1);   sec.right_margin  = Cm(1)
+    sec.top_margin    = Cm(1.5); sec.bottom_margin = Cm(1.5)
     for p in sec.header.paragraphs: p.clear()
     for p in sec.footer.paragraphs: p.clear()
 
@@ -327,7 +327,7 @@ def build_docx(pre_items, table_rows, out):
         elif k == 'title':
             if prev not in (None,'org'): add_p(doc,'')
             add_p(doc, t, bold=True, align=C)
-        elif k == 'ementa':       add_p(doc, t, align=J, li=8.5)
+        elif k == 'ementa':       add_p(doc, t, align=J, li=8.5); add_p(doc,'')
         elif k == 'text':         add_p(doc, t, align=J)
         elif k == 'signature':    add_p(doc,''); add_p(doc, t, bold=True, align=C)
         elif k == 'section_label': add_p(doc,''); add_p(doc, t, bold=True, align=C)

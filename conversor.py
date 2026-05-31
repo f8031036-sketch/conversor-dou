@@ -299,36 +299,82 @@ def merge_pre_table(lines):
 
 
 def build_table_from_rows(table_lines):
-    rows        = []
-    pending_c0  = ''
-    pending_c1  = ''
+    """
+    Constrói linhas da tabela tratando todas as quebras do PDF:
+    
+    Casos tratados:
+    A) HDR:  c0=NOME_SEÇÃO c1=CARGO/FUNÇÃO... → cabeçalho de bloco + cabeçalho de colunas
+    B) DAT:  c2/c3/c4 preenchidos → linha de dado completa
+    C) PRE:  c1 sem dados → cargo antes dos dados (ex: "Secretário-Executivo")
+    D) POS:  c1 sem dados após DAT → continuação do cargo (ex: "Adjunto")
+    E) UC0:  só c0 sem dados → continuação do nome da unidade
+    F) MIX:  c0 + dados mas sem c1 → unidade e dados, cargo estava em PRE
+    """
+    rows       = []
+    pending_c0 = ''   # nome de unidade acumulado
+    pending_c1 = ''   # cargo acumulado (antes dos dados)
+    last_had_data = False
 
     for line in table_lines:
         t     = line['text'].strip()
         cells = extract_cells_by_bounds(line)
-        c0,c1,c2,c3,c4 = cells
-        has_data = bool(c2 or c3 or c4)
+        c0, c1, c2, c3, c4 = cells
+        has_data   = bool(c2 or c3 or c4)
+        has_header = ('CARGO/FUNÇÃO' in t or 'NÍVEL' in t)
 
-        if 'CARGO/FUNÇÃO' in t and 'NÍVEL' in t:
-            rows.append(list(HEADER_ROW)); pending_c0=pending_c1=''; continue
-
-        if not has_data:
-            if c1 and not c0:
-                if rows and rows[-1][1] and rows[-1] != list(HEADER_ROW):
-                    rows[-1][1] = (rows[-1][1]+' '+c1).strip()
-                else:
-                    pending_c1 = (pending_c1+' '+c1).strip()
-            elif c0 and not c1:
-                pending_c0 = (pending_c0+' '+c0).strip()
-            elif c0 and c1:
-                pending_c0 = (pending_c0+' '+c0).strip()
-                pending_c1 = (pending_c1+' '+c1).strip()
+        # ── Caso A: cabeçalho de bloco (pode ter nome da seção em c0) ──
+        if has_header:
+            # c0 pode ter o nome da seção (ex: "GABINETE MINISTERIAL")
+            # ou pode ser "UNIDADE/ÓRGÃO" (cabeçalho genérico)
+            sec_name = (pending_c0 + ' ' + c0).strip()
+            pending_c0 = pending_c1 = ''
+            last_had_data = False
+            rows.append(list(HEADER_ROW))
+            # Se tinha nome de seção real (não é só "UNIDADE/ÓRGÃO"), adiciona linha de seção
+            if sec_name and sec_name.upper() not in ('UNIDADE/ÓRGÃO', ''):
+                # Insere antes do cabeçalho de colunas
+                rows.insert(len(rows)-1, [sec_name, '', '', '', ''])
             continue
 
-        final_c0 = (pending_c0+' '+c0).strip() if c0 else pending_c0
-        final_c1 = (pending_c1+' '+c1).strip() if c1 else pending_c1
-        pending_c0 = pending_c1 = ''
-        rows.append([final_c0, final_c1, c2, c3, c4])
+        # ── Caso B/F: linha com dados ──
+        if has_data:
+            final_c0 = (pending_c0 + ' ' + c0).strip() if c0 else pending_c0
+            final_c1 = (pending_c1 + ' ' + c1).strip() if c1 else pending_c1
+            pending_c0 = pending_c1 = ''
+            last_had_data = True
+            rows.append([final_c0, final_c1, c2, c3, c4])
+            continue
+
+        # ── Linha sem dados ──
+        if c1 and not c0:
+            if last_had_data and rows and rows[-1] != list(HEADER_ROW):
+                # Caso D: continuação do cargo da linha anterior (ex: "Adjunto", "Especial")
+                rows[-1][1] = (rows[-1][1] + ' ' + c1).strip()
+            else:
+                # Caso C: cargo antes dos dados
+                pending_c1 = (pending_c1 + ' ' + c1).strip()
+                last_had_data = False
+            continue
+
+        if c0 and not c1:
+            # Caso E: continuação do nome da unidade
+            # Se last_had_data=True e a última linha tinha c0 vazio → é continuação da linha anterior
+            if last_had_data and rows and rows[-1] != list(HEADER_ROW) and not rows[-1][0]:
+                rows[-1][0] = (rows[-1][0] + ' ' + c0).strip()
+            # Ou se pending_c0 anterior terminava com vírgula → continua na linha seguinte após dados
+            elif last_had_data and rows and rows[-1] != list(HEADER_ROW) and rows[-1][0].endswith(','):
+                rows[-1][0] = (rows[-1][0] + ' ' + c0).strip()
+            else:
+                pending_c0 = (pending_c0 + ' ' + c0).strip()
+                last_had_data = False
+            continue
+
+        if c0 and c1:
+            # Ambos sem dados — acumula os dois
+            pending_c0 = (pending_c0 + ' ' + c0).strip()
+            pending_c1 = (pending_c1 + ' ' + c1).strip()
+            last_had_data = False
+
     return rows
 
 

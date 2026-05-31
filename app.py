@@ -123,55 +123,71 @@ if arquivo:
 
 st.divider()
 
+# ── Formato ────────────────────────────────────────────────────────────────────
+st.markdown("#### 2. Formato de publicação")
+
+col1, col2 = st.columns(2)
+with col1:
+    btn_inteira = st.button(
+        "📄 Página inteira\n\n25cm · Tabelas grandes · Portarias com Anexo CCE/FCE",
+        use_container_width=True,
+        disabled=not arquivo,
+        key="btn_inteira"
+    )
+with col2:
+    btn_meia = st.button(
+        "📋 Meia página\n\n12cm · Atos simples · Sem tabela ou tabela pequena",
+        use_container_width=True,
+        disabled=not arquivo,
+        key="btn_meia"
+    )
+
+st.divider()
+
 # ── Converter ─────────────────────────────────────────────────────────────────
-st.markdown("#### 2. Gerar DOCX")
+def processar(formato):
+    with st.spinner("Processando…"):
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
+                arquivo.seek(0)
+                tmp_pdf.write(arquivo.read())
+                pdf_path = tmp_pdf.name
 
-if not arquivo:
-    st.button("🔄 Converter para padrão DOU", disabled=True, use_container_width=True)
-else:
-    if st.button("🔄 Converter para padrão DOU", type="primary", use_container_width=True):
+            docx_path = pdf_path.replace(".pdf", "_DOU.docx")
+            progress = st.progress(0, text="Lendo o PDF…")
+            convert(pdf_path, docx_path, formato=formato)
+            progress.progress(100, text="Concluído!")
 
-        with st.spinner("Processando…"):
-            try:
-                # Salva PDF em temp
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-                    tmp_pdf.write(arquivo.read())
-                    pdf_path = tmp_pdf.name
+            with open(docx_path, "rb") as f:
+                docx_bytes = f.read()
 
-                # Gera DOCX em temp
-                docx_path = pdf_path.replace(".pdf", "_DOU.docx")
+            os.unlink(pdf_path)
+            os.unlink(docx_path)
 
-                progress = st.progress(0, text="Lendo o PDF…")
-                convert(pdf_path, docx_path)
-                progress.progress(100, text="Concluído!")
+            nome_saida = Path(arquivo.name).stem + f"_DOU_{formato}.docx"
+            fmt_label  = "Página inteira (25cm)" if formato == "inteira" else "Meia página (12cm)"
 
-                # Lê o DOCX gerado
-                with open(docx_path, "rb") as f:
-                    docx_bytes = f.read()
+            st.success("✅ DOCX gerado com sucesso!")
+            st.caption(f"{fmt_label} · Calibri 9pt · Espaço simples · Portaria IN/CC/PR nº 1/2024")
 
-                # Limpa temporários
-                os.unlink(pdf_path)
-                os.unlink(docx_path)
+            st.download_button(
+                label="⬇️ Baixar DOCX",
+                data=docx_bytes,
+                file_name=nome_saida,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"⚠️ Erro ao processar o PDF: {e}")
+            try: os.unlink(pdf_path)
+            except: pass
 
-                nome_saida = Path(arquivo.name).stem + "_DOU.docx"
-
-                st.success("✅ DOCX gerado com sucesso!")
-                st.caption("Formatado conforme Portaria IN/CC/PR nº 1/2024 · Calibri 9pt · Espaço simples")
-
-                st.download_button(
-                    label="⬇️ Baixar DOCX",
-                    data=docx_bytes,
-                    file_name=nome_saida,
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True
-                )
-
-            except Exception as e:
-                st.error(f"⚠️ Erro ao processar o PDF: {e}")
-                try:
-                    os.unlink(pdf_path)
-                except:
-                    pass
+if btn_inteira:
+    processar("inteira")
+elif btn_meia:
+    processar("meia")
+elif not arquivo:
+    st.info("⬆️ Selecione um PDF acima para habilitar a conversão.")
 
 st.divider()
 st.caption("MGI · Secretaria de Serviços Compartilhados · DGP — uso interno")
